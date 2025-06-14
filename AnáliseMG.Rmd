@@ -1,0 +1,335 @@
+---
+title: "Dados CAMS x Von Donkelar"
+author: "Ana Li"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+---
+
+# **Desempenho dos dados de material particulado<br>fino sobre a qualidade do ar em estudo<br>epidemiológico no estado de Minas Gerais**
+
+
+
+```{r bases, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(sf)
+library(geobr)
+library(readxl)
+library(tmap)
+library(irr)
+
+#LENDO OS SHAPES DE MG, DADOS DO CAMS E VON DONKELAR 
+cams = read.csv("PM2.5_diario_2023.csv.opdownload")
+von_donkelar = read_excel("dados_completos_consolidado_donkelar.xlsx")
+
+mg_cams = cams |> 
+  mutate(data = ymd(Date),
+         mes = month(data),
+         Cod = as.character(Cod)) |> 
+  filter(str_starts(Cod,'31')) |> 
+  select(Cod,data,mes,PM2.5)
+
+
+mg_von = von_donkelar |> 
+  filter(SIGLA_UF == 31) |> 
+  mutate(CD_MUN = as.character(CD_MUN))
+
+shp=read_sf("MG_Municipios_2024.shp")
+
+```
+
+
+### **Métodos**
+
+**Desenho e Área de Estudo:** Estudo ecológico de séries temporais mensais em 2023, no estado de Minas Gerais. 
+
+**Base de dados:** Foram utilizadas duas bases de dados. A primeira consiste em estimativas diárias obtidas pela Copernicus Atmosphere Monitoring Service (CAMS) e a segunda possui dados mensais do satélite Von Donkelar.
+
+
+**Análise de Dados:**
+
+*Medidas de concordância*\
+A concordância entre os dados diários de PM2,5 modelados do CAMS e do Von Donkelar foram investigadas por meio do teste t para amostras pareadas, do método de *Bland-Altman*. 
+O método gráfico de *Bland-Altman* avalia a concordância entre uma medida aferida por dois métodos distintos.
+Diferença = $PM2.5_{von} – PM2.5_{cams}$ e Média= $\frac{PM2.5_{von} + PM2.5_{cams}}{2}$.
+
+Nesse método, as médias são usadas como estimativas do valor verdadeiro do PM2,5 e, portanto, é possível investigar a relação dos erros com o valor verdadeiro de PM2,5.\
+
+
+\
+
+### **Resultados**
+
+#### Distribuição dos dados
+
+``` {r tabelas, echo = F, message = F} 
+mg_von_mensal = mg_von |> 
+  mutate(mes = factor(Mes, 
+                      levels = 1:12, 
+                      labels = c("Jan", "Fev", "Mar", "Abril", "Mai", "Jun", 
+                                 "Jul", "Ago", "Set", "Out", "Nov", "Dez")))|>
+  group_by(mes) |> 
+  summarise(VON = mean(Media_PM25))
+
+
+mg_cams_mensal = mg_cams |> 
+  mutate(mes = factor(mes, 
+                      levels = 1:12, 
+                      labels = c("Jan", "Fev", "Mar", "Abril", "Mai", "Jun", 
+                                 "Jul", "Ago", "Set", "Out", "Nov", "Dez")))|>
+  group_by(mes) |> 
+  summarise(CAMS = mean(PM2.5))
+
+
+mg_mensal1 = mg_von_mensal |> 
+  left_join(mg_cams_mensal,by = "mes")
+
+mg_mensal = mg_mensal1 |> 
+  pivot_longer(cols = c(VON,CAMS),
+               names_to = "pm",
+               values_to = "valor")
+
+
+# tabelas pros gráficos de dispersão
+
+mg_cams_medio = mg_cams %>% 
+  group_by(Cod,mes) %>% 
+  summarize(pm2.5_mensal = mean(PM2.5))
+
+mg_total = mg_von |> 
+  left_join(mg_cams_medio,join_by("CD_MUN" == "Cod","Mes" == "mes"))
+
+mg_total = mg_total |> 
+  mutate(diferenca = Media_PM25 -pm2.5_mensal,
+         media = (Media_PM25 + pm2.5_mensal)/2)
+
+mg_disp = mg_cams_mensal %>% left_join(mg_von_mensal,join_by(mes)) %>% 
+  mutate(diferenca = VON - CAMS,
+         media = (VON+CAMS)/2)
+
+
+# tabela pro gráfico boxplot
+mg_longo <- mg_total |> 
+  pivot_longer(cols = c(Media_PM25,pm2.5_mensal), 
+               names_to = "pm", 
+               values_to = "valor") |> 
+  mutate(mes = factor(Mes, 
+                      levels = 1:12, 
+                      labels = c("Jan", "Fev", "Mar", "Abril", "Mai", "Jun", 
+                                 "Jul", "Ago", "Set", "Out", "Nov", "Dez")),
+         PM = case_when(pm %in% c("Media_PM25") ~ "VON",
+                        pm %in% c("pm2.5_mensal") ~ "CAMS"))
+
+```
+
+
+
+
+``` {r barras, echo = F, message = F, fig.width=10, fig.height=6} 
+ggplot(mg_mensal,aes(x = mes, y = valor,fill = pm)) +
+  geom_bar(stat= 'identity',position = 'dodge') +
+  labs(title = "Média de PM 2.5 por mês e fonte",x="Mês",y="PM 2.5 Médio",fill = "Satélite") +
+  scale_fill_manual(values = c("#56B4E9", "#E69F00")) +
+  theme_minimal()
+```
+
+``` {r séries, echo = F, fig.width=10, fig.height=6}
+ggplot(mg_mensal,aes(x = mes, y = valor, color = pm, group = pm)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size=2)+
+  labs(title = "Média de PM 2.5 por mês ",x="Mês",y="PM 2.5 Médio",color = "Satélites") +
+  scale_color_manual(values = c("#56B4E9","#E69F00")) +
+  theme_minimal()
+
+# boxplot
+ggplot(mg_longo,aes(x = mes,  y = valor, fill = PM)) +
+  geom_boxplot() +
+  labs(title = "Distribuição da Média de PM 2.5 por mês",x="Mês",y="PM 2.5 Médio", fill = "Satélites") +
+  scale_fill_manual(values = c("#56B4E9","#E69F00")) +
+  theme_minimal()
+```
+
+
+
+####  Comparação entre os dados da Copernicus x Von Donkelar
+
+
+``` {r dispersão1, message = F, echo = F, warning = F, fig.width=10, fig.height=6} 
+ggplot(mg_total, aes(x = pm2.5_mensal, y = Media_PM25)) +
+  geom_point() +
+  labs(x = "PM2.5 CAMS", y = "PM2.5 VON", title = "Dispersão entre os PM2.5") +
+  theme_minimal()
+
+# blandaltman
+media_diff <- mean(mg_total$diferenca)
+dp_diff <- sd(mg_total$diferenca)
+limite_superior <- media_diff + 1.96 * dp_diff
+limite_inferior <- media_diff - 1.96 * dp_diff
+
+ggplot(mg_total, aes(x = media, y = diferenca)) +
+  geom_point() +
+  geom_hline(yintercept = media_diff, color = "blue") +
+  geom_hline(yintercept = limite_superior, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = limite_inferior, color = "red", linetype = "dashed") +
+  labs(y = "Diferenças (VON - CAMS)", x = "Médias", title = "Bland-Altman") +
+  theme_minimal()
+
+```
+
+*ICC (Intraclass Correlation Coefficient)*
+
+O ICC é usado para medir a confiabilidade ou concordância entre medidas.
+
+A classificação da concordância a partir do ICC foi baseada na classificação de Weir (2005) dada por:
+
+0,00 ≤ ICC ≤ 0,20 = concordância pobre,
+
+0,20 < ICC ≤ 0,40 = concordância razoável,
+
+0,40 < ICC ≤ 0,60 = concordância boa,
+
+0,60 < ICC ≤ 0,80 = concordância muito boa,
+
+0,80 < ICC ≤ 1,00 = concordância excelente.
+
+A significância do ICC foi analisada pelo intervalo de confiança do ICC ao nível de 95% de confiança. E o valor mínimo do intervalo de confiança para o ICC  deve ser maior que 0,4 para que a concordância seja considerada significativa.
+
+```{r icc1}
+
+avaliacoes = mg_total[, c("pm2.5_mensal", "Media_PM25")]
+icc1=icc(avaliacoes, model = "twoway", type = "consistency", unit = "single")
+ValorICC1= round(icc1$value,2)
+IC95_ICC1=c(round(icc1$lbound,3), round(icc1$ubound,3))
+
+print(icc1)
+
+```
+- ICC(C,1) = 0.474 indica uma confiabilidade boa 
+
+- O teste F rejeita a hipótese nula (ICC = 0), indicando que há alguma concordância significativa
+
+
+```{r dispersão2 ,message = F, echo = F, warning = F,}
+
+
+ggplot(mg_disp, aes(x = CAMS, y = VON)) +
+  geom_point() +
+  labs(x = "PM2.5 CAMS", y = "PM2.5 VON", title = "Dispersão entre os PM2.5") +
+  theme_minimal()
+
+# blandaltman
+media_diff = mean(mg_disp$diferenca)
+dp_diff = sd(mg_disp$diferenca)
+limite_superior = media_diff + 1.96 * dp_diff
+limite_inferior = media_diff - 1.96 * dp_diff
+
+ggplot(mg_disp, aes(x = media, y =diferenca)) +
+  geom_point() +
+  geom_hline(yintercept = media_diff, color = "blue") +
+  geom_hline(yintercept = limite_superior, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = limite_inferior, color = "red", linetype = "dashed") +
+  labs(y = "Diferenças (VON - CAMS)", x = "Médias", title = "Bland-Altman") +
+  theme_minimal()
+```
+
+*ICC (Intraclass Correlation Coefficient)*
+
+```{r icc2}
+avaliacoes2 = mg_mensal1[, c("CAMS", "VON")]
+icc2=icc(avaliacoes2, model = "twoway", type = "consistency", unit = "single")
+ValorICC2= round(icc2$value,2)
+IC95_ICC2=c(round(icc2$lbound,3), round(icc2$ubound,3))
+
+print(icc2)
+
+```
+- ICC(C,1) = 0.126 indica uma confiabilidade pobre
+
+- p = 0.341 não significativo (p > 0.05): Não há evidências para rejeitar a hipótese nula (ICC = 0).
+
+- O tamanho amostral (12) é muito pequeno
+
+
+
+
+
+### **Mapa dos PM2.5 do estado do mg**
+``` {r mapas, echo = F, message = F, fig.width=10, fig.height=6}
+total_cams = sum(mg_cams$PM2.5)
+total_von = sum(mg_von$Media_PM25)
+
+cams_cod = mg_cams |> 
+  group_by(Cod) |> 
+  summarise(pm2.5_cod_cams = mean(PM2.5))
+
+von_cod = mg_von |> 
+  group_by(CD_MUN) |> 
+  summarise(pm2.5_cod_von = mean(Media_PM25))
+
+
+cams_shape = left_join(x = shp,
+                        y = cams_cod,
+                        join_by("CD_MUN" == "Cod"))
+
+von_shape = left_join(x = shp,
+                        y = von_cod,
+                        join_by("CD_MUN" == "CD_MUN"))
+
+ggplot(cams_shape) +
+  geom_sf(aes(fill=pm2.5_cod_cams)) +
+  scale_fill_gradient(name = "PM2.5 μg/m3",
+                      low = "#66bb6a", high = "#ef5350",
+                      limits = c(0, max(cams_shape$pm2.5_cod_cams))) +
+  labs(title = 'Distribuição de PM2.5 médio do CAMS por município',
+       caption = 'Fontes: Copernicus Atmosphere Monitoring Service \nDon Vonkelar')+
+  theme_minimal()
+  
+ggplot(von_shape) +
+  geom_sf(aes(fill=pm2.5_cod_von)) +
+  scale_fill_gradient(name = "PM2.5 μg/m3",
+                      low = "#66bb6a", high = "#ef5350",
+                      limits = c(0, max(cams_shape$pm2.5_cod_cams))) +
+  labs(title = 'Distribuição de PM2.5 médio do Von por município',
+       caption = 'Fontes: Copernicus Atmosphere Monitoring Service \nDon Vonkelar')+
+  theme_minimal()
+
+ggplot(von_shape) +
+  geom_sf(aes(fill=pm2.5_cod_von)) +
+  scale_fill_gradient(name = "PM2.5 μg/m3",
+                      low = "#66bb6a", high = "#ef5350",
+                      limits = c(min(von_shape$pm2.5_cod_von), max(von_shape$pm2.5_cod_von))) +
+  labs(title = 'Distribuição de PM2.5 médio do Von por município',
+       caption = 'Fontes: Copernicus Atmosphere Monitoring Service \nDon Vonkelar')+
+  theme_minimal()
+
+```
+
+Percebemos que a o PM2.5 captado pelos dois satélites é maior na parte inferior do estado de Minas Gerais
+
+### Teste t 
+
+O teste t pareado foi utilizado para avaliar diferenças entre os métodos de medição quanto ao viés sistemático. 
+
+``` {r teste t} 
+# teste t mensal (1)
+t.test(mg_mensal1$VON, mg_mensal1$CAMS, paired = TRUE)
+
+# teste t municipios (2)
+t.test(mg_total$Media_PM25, mg_total$pm2.5_mensal, paired = TRUE)
+
+```
+
+
+
+### Referências
+
+WEIR, J.P. (2005) Quantifying test-retest reliability using the intraclass
+correlation coefficient and the SEM. J StrengthCond Res. 19(1):231-40.
+
+https://atmosphere.copernicus.eu/charts/packages/cams/
+
+https://sites.wustl.edu/acag/datasets/surface-pm2-5/#V6.GL.02.03
+

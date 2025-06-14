@@ -1,0 +1,2585 @@
+---
+title: "Relatório Autoavaliação da Saúde"
+author: "Ana, Brenner, Diogo, Fenicio e Marina"
+date: "`r Sys.Date()`"
+output:   
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: 
+      bg : '#ffffff'  
+      fg : '#132f3c'   
+      primary : '#132f3c'
+---
+
+O relatório a seguir é uma análise descritiva sobre a **autoavaliação de saúde** dos moradores do Garimpo de Bom Futuro, Rondônia. No ano de 2008, foi criado o projeto "Construindo Ciência com a Comunidade do Garimpo de Bom Futuro", no qual os moradores tiveram que responder um questionário individual avaliando sua saúde. 
+
+Criando então, uma base de dados `banco completo.sav` que foi utilizada para fazer as análises, o principal objetivo é observar como é a percepção das pessoas sobre a própria saúde, com a variável principal de resposta "Em geral o(a) Sr.(a) diria que sua saúde é: Excelente; Muito Boa; Boa; Ruim; Muito Ruim".
+
+# Filtragens
+
+Para melhor entendimento do banco de dados, realizamos as seguintes filtragens:
+
+```{r setup, include=FALSE}
+Sys.setlocale("LC_ALL", "pt_BR.UTF-8")
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  echo = FALSE)
+```
+
+```{r bases, echo = T, message = F}
+# Pacotes que serão usados ao longo das análises
+library(tidyverse)
+library(haven)
+library(scales)
+library(gridExtra)
+
+# Lendo a base de dados
+base = read_sav('banco completo.sav')
+
+# Selecionando as variáveis que achamos mais importantes de analisar
+base_filt = base |>
+  select("q1", "q2_Idade","q5_outro","q6", "q10", "q12", "q15", "q16", "q25", "q28_a", 
+         "q28_b", "q28_c", "q29", "q30", "q36","q37", "q38", "q39", "q40", "q41", "q43", 
+         "q44", "q50", 
+         "q54_a", "q54_b", "q55", "q66", "q67_a":'q67_d', "q71", "q78", "q84", "q82",
+         "q86", "q88", "q90", "q92", "q94", "q97", "q103", "q105", "q107", "q108", 
+         "q113", "q115", "q119", "q125", "q126", "q131", "q132", "q133",
+         "q133_nuca","q133_ombro_esq","q133_ombro_dir","q133_braço_esq",
+         "q133_braço_dir","q133_alto_costas","q133_mão_esq", "q133_mão_dir",
+         "q133_baixo_costas","q133_nádegas","q133_coxas","q133_joelhos",
+         "q133_pernas","q133_pés", "q134", "q135_a":"q135_h", "q136",
+         "q137_a":"q137_d", "q138", "q139", "q140", "q142", "q144",
+         "q145", "q148", "q149", "q162_1", "q163_a":'q163_c', "q164_1":'q164_8')
+
+
+# Contando quantas NAs tem em cada variável, a fim de saber se é importante analisar ou não
+base_na = base_filt |> 
+  summarise(across(everything(), ~sum(is.na(.)))) |> 
+  select(where(~. > 175)) 
+
+# Modificando a variável q125, agrupando em apenas duas opções "Boa"/"Ruim"
+base_ut = base_filt  |> 
+  filter(!is.na(q125)) |> 
+  mutate(q125 = case_when(q125 %in% c(1,2,3) ~ "Boa",
+                          q125 %in% c(4,5) ~ "Ruim"),
+         q125 = factor(q125, levels = c('Boa', 'Ruim')))
+```
+
+# Variáveis utilizadas 
+
+## Sociodemográficas
+
+### Sexo (q1)
+
+```{r sexo}
+sexo = base_ut %>% 
+  group_by(q125,q1) %>%
+  mutate(q1 = case_when(q1 == 1 ~ 'Masculino',
+                        q1 == 2 ~ 'Feminino')) %>% 
+  summarize(n = n()) %>% 
+  mutate(prop = n/sum(n),
+         rotulo = scales::percent(prop))
+ 
+sexo %>% 
+  ggplot(aes(x = q125, y = n,fill = q1))+
+  geom_text(aes(label = n),position = position_dodge(width = 0.9),vjust=-0.5)+
+  geom_bar(stat = 'identity',position = 'dodge',alpha = 0.7)+
+  labs(title = "Comparação por Frequência Absoluta do Sexo e da Saúde", x = 'Saúde', y = 'Frequência', fill = 'Gênero')+
+  scale_fill_manual(values = c("pink", "cornflowerblue")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+\
+No gráfico acima, é possível observar que a maior parte das pessoas que tem uma saúde ruim são **homens**.
+\
+
+### Idade (q2_Idade)
+
+\
+
+```{r idade}
+idade = base_ut |> 
+  mutate(idade = case_when(q2_Idade %in% c(15:24) ~ "15-24 anos (Jovem)",
+                           q2_Idade %in% c(25:44) ~ "25-44 anos (Adulto jovem)",
+                           q2_Idade %in% c(45:59) ~ "45-59 anos (Adulto)",
+                           q2_Idade %in% c(60:74) ~ "60-74 anos (Idoso)",
+                           q2_Idade %in% c(75:90) ~ "75-90 anos (Ancião)")) |> 
+  group_by(idade) |> 
+  summarise(total = n())
+
+ggplot(idade, aes(x = factor(idade, levels = c("15-24 anos (Jovem)",
+                                               "25-44 anos (Adulto jovem)",
+                                               "45-59 anos (Adulto)",
+                                               "60-74 anos (Idoso)",
+                                               "75-90 anos (Ancião)")), y = total)) +
+  geom_bar(stat = "identity", fill = "cornflowerblue", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Idade dos moradores",
+       x = "Faixa Etária", y = "Total") +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+```
+\
+O gráfico acima representa a frequência absoluta das faixas etárias, dividas em 5 intervalos, retirados da classificação da OMS. É possível observar que **"Adulto Jovem"** é o que mais aparece.
+
+\
+
+
+```{r idade x saúde}
+idade_s = base_ut |> 
+  filter(!is.na(q2_Idade)) |> 
+  group_by(q2_Idade,q125) |> 
+  summarise(total = n())
+
+medianas_saude <- idade_s |> 
+  group_by(q125) |> 
+  summarise(mediana_idade = median(q2_Idade))
+
+ggplot(idade_s, aes(x = q125, y = q2_Idade)) +
+  geom_boxplot() +
+  geom_text(data = medianas_saude, aes(x = q125, y = mediana_idade,
+                                       label = round(mediana_idade, 1)),
+            vjust = 1.5, size = 3.8) +
+  labs(title = "Comparação da Faixa Etária e da Saúde Autoavaliada",
+       x = 'Saúde', y = 'Faixa Etária') +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+O boxplot acima compara a saúde autoavaliada com a idade dos moradores. Ao analisar, é notável que a maioria das pessoas possuem uma boa saúde, inclusive os moradores mais velhos. Destaca-se com a **pior saúde** o grupo de Adulto Jovem, com **14** observações.
+
+\
+
+### Religião (q5_outro)
+
+```{r religiao}
+religiao = base_ut |>
+  mutate(religiao = case_when(q5_outro %in% c("CRISTA", "CRISTÃ", "CONG. CRISTÃ", "PALAVRA DE CRISTO", "PROTESTANTE","EVANGELICA","EVANGÉLICA","CCB","CCB (EVANGÉLICA)", "ASSEMBLEIA DE DEUS","ASSEMBLÉIA DE DEUS JESUS VIRÁ", "ASSEMBLÉIA DE DEUS","ASSEMBLÉIA DE DEUS MADUREIRA", "ASSEMBLÉIA MADUREIRA","ADVENTISTA","ADVENTISTA DO 7º DIA") ~ "Evangélica",
+                              q5_outro %in% c("CATOLICA","CATÓLICA") ~ "Católica",
+                              q5_outro %in% c("NÃO TEM","NENHUMA","ESPÍRITA") ~ "Nenhuma/Outra")) |> 
+  filter(!is.na(religiao)) |> 
+  group_by(religiao) |> 
+  summarise(total = n())
+
+
+ggplot(religiao, aes(x = religiao, y = total))+
+  geom_bar(stat = "identity", fill = "cornflowerblue", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Religião dos moradores",
+       x = "Religião", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+No gráfico acima das religiões dos moradores, agrupamos em 3 pequenos grupos, "Católica", "Evangélica" e "Nenhuma/Outra", para facilitar a visualização e a análise. Ao observar, é perceptível que a religião **católica** é a que mais aparece.
+\
+
+``` {r religiao x saude}
+religiao_saude = base_ut |>
+  mutate(religiao = case_when(q5_outro %in% c("CRISTA", "CRISTÃ", "CONG. CRISTÃ", "PALAVRA DE CRISTO", "PROTESTANTE","EVANGELICA","EVANGÉLICA","CCB","CCB (EVANGÉLICA)", "ASSEMBLEIA DE DEUS","ASSEMBLÉIA DE DEUS JESUS VIRÁ", "ASSEMBLÉIA DE DEUS","ASSEMBLÉIA DE DEUS MADUREIRA", "ASSEMBLÉIA MADUREIRA","ADVENTISTA","ADVENTISTA DO 7º DIA") ~ "Evangélica",
+                              q5_outro %in% c("CATOLICA","CATÓLICA") ~ "Católica",
+                              q5_outro %in% c("NÃO TEM","NENHUMA","ESPÍRITA") ~ "Nenhuma/Outra")) |> 
+  filter(!is.na(religiao)) |> 
+  group_by(religiao,q125) |> 
+  summarise(total = n())
+
+ggplot(religiao_saude, aes(x = religiao, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta da Religião e da Saúde",
+       x = 'Religião', fill = 'Saúde') +
+  scale_fill_manual(values = c("lightblue", "cornflowerblue")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+
+``` {r taxa religiao}
+taxa_religiao = religiao_saude |> 
+  left_join(religiao, by = "religiao") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_religiao |> select(religiao,q125,taxa)
+
+```
+\
+No gráfico acima de frequência Absoluta da saúde autoavaliada com a religião dos moradores, o que chama atenção é a **"Evangélica"**, com o maior número de pessoas com a sáude ruim. No entanto, ao calcular a taxa, é possível observar que de 100 pessoas que moram na região e possuem **"Nenhuma/Outra"** religião, cerca de **17** tem a sáude ruim.
+\
+
+
+### Escolaridade (q6)
+
+```{r escolairdade}
+escolaridade = base_ut |> 
+  filter(!is.na(q6)) |> 
+  mutate(escolaridade = case_when(q6 %in% c(1,2) ~ "Alfabetizado\nDisfuncional",
+                                  q6 %in% c(3,4) ~ "1ª a 4ª série\nincompleto/completo",
+                                  q6 %in% c(5,6) ~ "Fundamental\n(1ª grau)\nincompleto/completo",
+                                  q6 %in% c(7,8) ~ "Ensino médio\n(2ª grau)\nincompleto/completo",
+                                  q6 %in% c(9,10) ~ "Superior\nincompleto/completo")) |> 
+  group_by(escolaridade) |> 
+  summarise(total = n())
+
+
+ggplot(escolaridade, aes(x = factor(escolaridade, levels = c("Alfabetizado\nDisfuncional","1ª a 4ª série\nincompleto/completo","Fundamental\n(1ª grau)\nincompleto/completo","Ensino médio\n(2ª grau)\nincompleto/completo","Superior\nincompleto/completo")), y = total))+
+  geom_bar(stat = "identity", fill = "cornflowerblue", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Escolaridade dos moradores",
+       x = "Escolaridade", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+\
+No gráfico acima agrupamos as categorias com "Completo" e "Incompleto", para facilitar a visualização e a análise. É perceptível que a escolaridade **"Fundamental (1ª grau) incompleto/completo"** é a que mais aparece.
+
+\
+
+``` {r escolaridade x saude}
+escolaridade_saude = base_ut |> 
+  filter(!is.na(q6)) |> 
+  mutate(escolaridade = case_when(q6 %in% c(1,2) ~ "Alfabetizado\nDisfuncional",
+                                  q6 %in% c(3,4) ~ "1ª a 4ª série\nincompleto/completo",
+                                  q6 %in% c(5,6) ~ "Fundamental\n(1ª grau)\nincompleto/completo",
+                                  q6 %in% c(7,8) ~ "Ensino médio\n(2ª grau)\nincompleto/completo",
+                                  q6 %in% c(9,10) ~ "Superior\nincompleto/completo")) |> 
+  group_by(escolaridade,q125) |> 
+  summarise(total = n())
+
+
+ggplot(escolaridade_saude, aes(x = factor(escolaridade, levels = c("Alfabetizado\nDisfuncional","1ª a 4ª série\nincompleto/completo","Fundamental\n(1ª grau)\nincompleto/completo","Ensino médio\n(2ª grau)\nincompleto/completo","Superior\nincompleto/completo")), y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta da Escolaridade e da Saúde",
+       x = 'Escolaridade', fill = 'Saúde') +
+  scale_fill_manual(values = c("lightblue", "cornflowerblue")) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_esc = escolaridade_saude |> 
+  left_join(escolaridade, by = "escolaridade") |> 
+  mutate(escolaridade = case_when(escolaridade == "Alfabetizado\nDisfuncional" ~ "Alfabetizado Disfuncional", escolaridade == "1ª a 4ª série\nincompleto/completo" ~ "1ª a 4ª série incompleto/completo", escolaridade == "Fundamental\n(1ª grau)\nincompleto/completo" ~ "Fundamental (1ª grau) incompleto/completo", escolaridade == "Ensino médio\n(2ª grau)\nincompleto/completo" ~ "Ensino médio (2ª grau) incompleto/completo", escolaridade == "Superior\nincompleto/completo" ~ "Superior incompleto/completo")) |> 
+  mutate(taxa = round((total.x / total.y) * 100,2)) |> 
+  select(escolaridade,q125,taxa)
+
+tibble(taxa_esc)
+```
+\
+No gráfico acima, comparamos a saúde autoavaliada com a escolaridade dos moradores, chamando atenção da **"1ª a 4ª série incompleto/completo"**, com o maior número de pessoas com a sáude ruim. Porém, ao calcular a taxa, é possível observar que de 100 pessoas que moram na região e são **"Alfabetizados Disfuncionais"**, cerca de **13** tem a sáude ruim.
+\
+
+
+### Principal Atividade (q10)
+
+```{r Principal Atividade}
+princ_atividade = base_ut |> 
+  mutate(princ_atividade = case_when(q10 == 1 ~ "Servidor\nPúblico",
+                                     q10 == 2 ~ "Empregado\ncom\nCarteira\nAssinada",
+                                     q10 == 3 ~ "Empregado\nsem\nCarteira\nAssinada",
+                                     q10 == 4 ~ "Empregador",
+                                     q10 == 5 ~ "Trabalhador\npor conta\nprópria",
+                                     q10 == 6 ~ "Do lar",
+                                     q10 == 7 ~ "Outro",
+                                     q10 == 8 ~ "Desempregado")) |> 
+  group_by(princ_atividade) |> 
+  summarise(total = n())
+
+
+ggplot(princ_atividade, aes(x = princ_atividade, y = total))+
+  geom_bar(stat = "identity", fill = "cornflowerblue", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Principal Atividade dos moradores",
+       x = "Atividade", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+\
+Ao observar o gráfico, é perceptível que a principal atividade exercida é **"Trabalhador por conta própria"** é a que mais aparece.
+\
+
+``` {r atividade x saude}
+princ_atividade_saude = base_ut |> 
+  mutate(princ_atividade = case_when(q10 == 1 ~ "Servidor\nPúblico",
+                                     q10 == 2 ~ "Empregado\ncom\nCarteira\nAssinada",
+                                     q10 == 3 ~ "Empregado\nsem\nCarteira\nAssinada",
+                                     q10 == 4 ~ "Empregador",
+                                     q10 == 5 ~ "Trabalhador\npor conta\nprópria",
+                                     q10 == 6 ~ "Do lar",
+                                     q10 == 7 ~ "Outro",
+                                     q10 == 8 ~ "Desempregado")) |> 
+  group_by(princ_atividade,q125) |> 
+  summarise(total = n())
+
+ggplot(princ_atividade_saude, aes(x = princ_atividade, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta da Atividade e da Saúde",
+       x = 'Principal Atividade', fill = 'Saúde') +
+  scale_fill_manual(values = c("lightblue", "cornflowerblue")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+taxa_ativ = princ_atividade_saude |> 
+  left_join(princ_atividade, by = "princ_atividade") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_ativ |> select(princ_atividade,q125,taxa)
+```
+\
+No gráfico acima, comparamos a saúde autoavaliada com a principal atividade dos moradores, chamando atenção o **"Trabalhador por conta própria"**, com o maior número de pessoas com a sáude ruim. No entanto, ao calcular a taxa, é possível observar que de 100 pessoas que moram na região e tem **"Outra principal atividade"**, cerca de **14** tem a sáude ruim, logo em seguida, a cada 100 pessoas que são "Trabalhador por conta própria", cerca de 10 tem a saúde ruim.
+\
+
+### Horas trabalhadas por dia (q12)
+
+No gráfico abaixo de frequência absoluta das horas trabalhadas por dia dos moradores, agrupamos em 5 intervalos para facilitar a visualização e a análise.
+\
+```{r}
+horas = base_ut |> 
+  filter(!is.na(q12)) |> 
+  mutate(horas = case_when(q12 %in% c(1,2) ~ "1 a 3 horas",
+                           q12 %in% c(4,5,6) ~ "4 a 6 horas",
+                           q12 %in% c(7,8,9) ~ "7 a 9 horas",
+                           q12 %in% c(10,11,12) ~ "10 a 12 horas",
+                           q12 %in% c(14,15) ~ "13 a 15 horas")) |> 
+
+  group_by(horas) |> 
+  summarise(total = n())
+
+
+ggplot(horas, aes(x = factor(horas, levels= c("1 a 3 horas","4 a 6 horas","7 a 9 horas",
+                                              "10 a 12 horas","13 a 15 horas")), y = total))+
+  geom_bar(stat = "identity", fill = "cornflowerblue", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta das Horas de Trabalho por dia dos moradores",
+       x = "Horas", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+\
+Ao observar o gráfico, é perceptível que tem mais moradores trabalhando de **7 a 9 horas** por dia, sendo a categoria que mais aparece.
+\
+
+``` {r horas x saude} 
+horas_s = base_ut |> 
+  filter(!is.na(q12)) |> 
+  group_by(q12,q125) |> 
+  summarise(total = n())
+
+medianas_horas <- horas_s |> 
+  group_by(q125) |> 
+  summarise(mediana_horas = median(q12))
+
+ggplot(horas_s, aes(x = q125, y = q12)) +
+  geom_boxplot() +
+  geom_text(data = medianas_horas, aes(x = q125, y = mediana_horas, label = round(mediana_horas, 1)),
+            vjust = 1.5, size = 3.8) +
+  labs(title = "Comparação das Horas Trabalhadas e da Saúde Autoavaliada",
+       x = 'Saúde', y = 'Horas') +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+\
+O boxplot acima compara a saúde autoavaliada com as horas trabalhadas dos moradores. Ao analisar, é notável que a maioria das pessoas possuem uma boa saúde, inclusive os moradores que trabalham mais. Destaca-se com a **pior saúde** as pessoas que trabalham de 7 a 9 horas, com **8** observações.
+\
+
+## Exposições ocupacionais
+
+### Atividade com fumaça (q15)
+```{r Atividade com fumaça}
+contato_fumaca = base_ut |> 
+  filter(!is.na(q15)) |> 
+  mutate(q15 = case_when(q15 == 1~'Sim',
+                         q15 == 2~'Não')) |> 
+  group_by(q125,q15) |> 
+  summarise(n = n())
+
+# grafico de frequencia 
+contato_fumaca %>% group_by(q15) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q15,y = prop,fill = q15))+
+  scale_fill_manual(values = c('orange', 'orange')) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(title = "Frequência Relativa do Contato com Fumaça",
+       y = 'Frequência',
+       x = 'Houve contato?')+
+  geom_bar(stat= 'identity', alpha = 0.5)+
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+#grafico empilhado
+contato_fumaca %>% 
+  ggplot(aes(x = q125,y = n,fill = q15))+
+  labs(fill = 'Contato com a fumaça',
+       x = 'Saúde',
+       y = "Proporção",
+       title = "Comparação por Frequência Relativa do Contato com Fumaça e da Saúde")+
+  scale_fill_manual(values = c('#7F3B08', 'orange'))+
+  geom_bar(stat= 'identity',position='fill', alpha = 0.5)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+  
+
+```
+\
+Ao analisar os gráficos acima, a maior parte dos moradores **não tiveram contato com fumaça** e dos que tiveram contato, tem uma pior saúde.
+\
+
+### Atividade com produtos químicos (q16)
+```{r Atividade com produtos químicos}
+
+contato_quim = base_ut %>% 
+  filter(!is.na(q16)) %>% 
+  mutate(q16 = case_when(q16 == 1~ 'Sim',
+                         q16 == 2~ 'Não')) %>% 
+  group_by(q125,q16)%>% 
+  summarise(n = n()) 
+
+contato_quim %>% group_by(q16) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q16,y =prop,fill = q16))+
+  scale_fill_manual(values = c('orange', 'orange')) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(title = "Frequência Relativa de Atividades com Produtos Químicos",
+       y = 'Frequência',
+       x = 'Houve contato?')+
+  geom_bar(stat= 'identity', alpha = 0.5)+
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+contato_quim %>% 
+  ggplot(aes(x = q125,y = n,fill = q16))+
+  labs(fill = 'Contato', y = 'Proporção',
+       x = 'Saúde', title = "Comparação da Frequência Relativa das Atividades com Produtos Químicos e da Saúde")+
+  scale_fill_manual(values = c('#7F3B08', 'orange'))+
+  geom_bar(stat= 'identity',position='fill', alpha = 0.5)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao analisar os gráficos acima, a maior parte dos moradores **não tiveram contato com produtos químicos** e dos que tiveram contato, tem uma pior saúde.
+\
+
+### Trabalho debaixo do Sol (q25)
+```{r Trabalho debaixo do Sol}
+
+trab_sol =  base_ut %>%
+  filter(!is.na(q25)) %>% 
+  mutate(q25 = case_when(q25 == 1 ~ 'Sim',
+                         q25 == 2 ~ 'Não')) %>% 
+  group_by(q125,q25)%>% 
+  summarise(n = n()) 
+
+trab_sol %>% group_by(q25) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q25,y = prop,fill = q25))+
+  scale_fill_manual(values = c('orange', 'orange')) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência',
+       x = 'Há contato com o Sol?',
+       title = "Frequência Relativa de Trabalho debaixo do Sol")+
+  geom_bar(stat= 'identity', alpha = 0.5)+
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+#grafico empilhado
+trab_sol %>% 
+  ggplot(aes(x = q125,y = n,fill = q25))+
+  labs(fill = 'Trabalha debaixo do Sol?',
+       title = "Comparação da Frequência Relativa do Trabalho debaixo do Sol e da Saúde",
+       y = 'Proporção',
+       x = 'Saúde ')+
+  scale_fill_manual(values = c('#7F3B08', 'orange'))+
+  geom_bar(stat= 'identity',position='fill', alpha = 0.5)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+\
+Ao analisar os gráficos acima, a maior parte dos moradores **não trabalham debaixo do sol** e dos que trabalham, tem uma pior saúde.
+\
+
+## Módulo de Violência
+
+```{r q28_a}
+violencia = base_ut %>% filter(!is.na(q28_a))%>%
+  mutate(sofreu_violencia = case_when(q28_a == 1~'Sim',
+                                      q28_a == 2~'Não',
+                                      q28_b == 1~'Sim',
+                                      q28_b == 2~'Não',
+                                      q28_c == 1~'Sim',
+                                      q28_c == 2~'Não')) %>% 
+  group_by(q125,sofreu_violencia)%>% 
+  summarise(n = n())
+
+# grafico de frequencia 
+violencia %>% group_by(sofreu_violencia) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = sofreu_violencia,y = prop,fill = sofreu_violencia))+
+  scale_fill_manual(values = c('#7890A8', '#A8A8A8')) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência', title = "Frequência Relativa de Violência Sofrida pelos moradores",
+       x = 'Sofreu Violência?')+
+  geom_bar(stat= 'identity',alpha=0.7)+
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+
+#grafico empilhado
+violencia %>% 
+  ggplot(aes(x = q125,y = n,fill = sofreu_violencia))+
+  labs(fill = 'Sofreu Violência', title = "Comparação da Frequência Relativa da Violência e da Saúde", y = 'Proporção',
+       x = 'Saúde ')+
+  scale_fill_manual(values = c('#7890A8', '#A8A8A8')) +
+  geom_bar(stat= 'identity',position='fill',alpha=0.7)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+```{r q29}
+familiar_morto = base_ut %>% filter(!is.na(q29) & !is.na(q30))%>%
+  mutate(suicidio_homicidio = case_when(q29 == 1~'Sim',
+                                      q29 == 2~'Não',
+                                      q30 == 1~'Sim',
+                                      q30 == 2~'Não'
+                                    )) %>% 
+  group_by(q125,suicidio_homicidio)%>% 
+  summarise(n = n())
+
+# grafico de frequencia 
+familiar_morto %>% group_by(suicidio_homicidio) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = suicidio_homicidio,y = prop,fill = suicidio_homicidio))+
+  scale_fill_manual(values = c('#7890A8', '#A8A8A8')) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência', title = "Frequência Relativa de Familiares Mortos dos moradores",
+       x = 'Algum Familiar Morto?')+
+  geom_bar(stat= 'identity',alpha=0.7)+
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+
+#grafico empilhado
+familiar_morto %>% 
+  ggplot(aes(x = q125,y = n,fill = suicidio_homicidio))+
+  labs(fill = 'Suicídio ou Homicídio na Família', title = "Comparação da Frequência Relativa de Familiar Morto e da Saúde", y = 'Proporção',
+       x = 'Saúde')+
+  scale_fill_manual(values = c('#7890A8', '#A8A8A8')) +
+  geom_bar(stat= 'identity',position='fill',alpha=0.7)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+## Sintomas Gerais
+
+### O(a) Sr.(a) vem tendo febre com freqüência? (q36)
+
+```{r}
+base_ut %>% group_by(q125,q36) %>% summarize(total = n()) %>%  
+  mutate(q36 = case_when(q36 == 1~'Sim',
+         q36 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q36)) +
+  labs(x = 'Saúde',y = 'Proporção',fill = 'Teve febre?',title="Comparação por Frequência Relativa de Febre e da Saúde")+
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+    theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### Há quanto tempo o(a) Sr.(a) vem tendo essa febre? (q37)
+
+```{r}
+base_ut %>% group_by(q125,q37) %>% summarize(total = n())%>%
+  filter(!is.na(q37)) %>% mutate(q37 = as.numeric(q37)) %>%
+  ggplot(aes(x = q125,y = total,fill = q37)) +
+  scale_fill_gradient(low = "#A6DBA0", high = "#00441B") +
+  geom_bar(stat = 'identity')+
+  labs(x = 'Saúde',y = 'Proporção',fill = 'Meses \ncom febre',title="Comparação por Frequência Relativa de Febre ao longo dos meses e da Saúde")+
+  theme_minimal()
+ 
+```
+
+### Nos últimos 30 dias, você teve diarréia? (q38)
+
+```{r}
+base_ut %>% group_by(q125,q38) %>% filter(!is.na(q38)) %>% summarize(total = n()) %>%  
+  mutate(q38 = case_when(q38 == 1~'Sim',
+                         q38 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q38)) +
+  geom_bar(stat = 'identity',position='dodge',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Teve diarréia?',title="Comparação por Frequência Relativa de Diarréia e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### Precisou ser internado por este motivo (diarréia)? (q39)
+
+```{r}
+base_ut %>% group_by(q125,q39) %>%  filter(!is.na(q39)) %>% summarize(total = n()) %>%  
+  mutate(q39 = case_when(q39 == 1~'Sim',
+                         q39 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q39)) +
+  geom_bar(stat = 'identity',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Internação',title="Comparação por Frequência Relativa de Internação por causa da Diarréia e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### Nos últimos 30 dias, o(a) Sr.(a) teve vômitos? (q40)
+
+```{r}
+base_ut %>% group_by(q125,q40) %>% summarize(total = n()) %>%  
+  mutate(q40 = case_when(q40 == 1~'Sim',
+                         q40 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q40)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Teve vômitos?',,title="Comparação por Frequência Relativa de Vomitos e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### Nos últimos 30 dias, o(a) Sr.(a) tem usado algum remédio? (q41)
+
+```{r}
+base_ut %>% group_by(q125,q41) %>% filter(!is.na(q41)) %>%summarize(total = n()) %>%  
+  mutate(q41 = case_when(q41 == 1~'Sim',
+                         q41 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q41)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Usou remédio?',title="Comparação por Frequência Relativa do Uso de Remédios e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### O(a) Sr(a) tem alguma doença que lhe acompanha por muito tempo? (q43)
+
+```{r}
+
+base_ut %>% group_by(q125,q43) %>% filter(q43!=3) %>%summarize(total = n()) %>%  
+  mutate(q43 = case_when(q43 == 1~'Sim',
+                         q43 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q43)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Tem alguma \ndoença?',title="Comparação por Frequência Relativa de Doença e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### Esta doença impede de alguma forma suas atividades? (q44)
+
+```{r}
+base_ut %>% group_by(q125,q44) %>% filter(q44!=3) %>%summarize(total = n()) %>%  
+  mutate(q44 = case_when(q44 == 1~'Sim',
+                         q44 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q44)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Impedimento',title="Comparação por Frequência Relativa da doença interferir nas Atividades e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+
+### O(a) Sr.(a) já perdeu alguma parte do corpo (pé, perna, braço e/ou mão)? (q50)
+
+```{r}
+base_ut %>% group_by(q125,q50) %>% filter(q50!=3) %>%summarize(total = n()) %>%  
+  mutate(q50 = case_when(q50 == 1~'Sim',
+                         q50 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q50)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Perdeu parte \ndo corpo?',title="Comparação por Frequência Relativa de Perder algum membro do corpo e da Saúde")+
+  scale_fill_manual(values = c('#A6DBA0','#00441B')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+
+## Módulo Respiratório
+
+### O(a) Sr.(a) costuma ter tosse
+
+```{r}
+base_ut %>% group_by(q125,q54_a,q54_b) %>%filter(!is.na(q54_a)&!is.na(q54_b)) %>%
+  summarize(total = n()) %>%  
+  mutate(tosse = case_when(q54_a==1|q54_b==1 ~ 'Sim',
+                           q54_a==2&q54_b==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = tosse)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Tem tosse?',title="Comparação por Frequência Relativa de Tosse e da Saúde")+
+  scale_fill_manual(values = c('#E1D7CBFF','#9A9C97FF')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### Para andar a pé, o(a) Sr.(a) tem dificuldade causada por dor ou algum problema nos ossos, nos músculos ou nas juntas? (q66)
+
+```{r}
+base_ut %>% group_by(q125,q66) %>%summarize(total = n()) %>%  
+  mutate(q66 = case_when(q66 == 1~'Sim',
+                         q66 ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q66)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Dificuldade \npara andar',title="Comparação por Frequência Relativa de Dificuldade de Locomoção e da Saúde")+
+  scale_fill_manual(values = c('#E1D7CBFF','#9A9C97FF')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+### O (a) Sr.(a) sente falta de ar ao andar depressa em terreno plano ou ao subir uma ladeira pouco inclinada?
+
+```{r}
+base_ut %>% group_by(q125,q67_a) %>%filter(!is.na(q67_a)) %>% summarize(total = n()) %>%  
+  mutate(q67_a = case_when(q67_a == 1~'Sim',
+                         q67_a ==2~'Não')) %>%
+  ggplot(aes(x = q125,y = total,fill = q67_a)) +
+  geom_bar(stat = 'identity',position='fill',alpha=0.7)+
+  labs(x = 'Saúde',y = 'Proporção',fill='Falta de ar',title="Comparação por Frequência Relativa de Falta de Ar e da Saúde")+
+  scale_fill_manual(values = c('#E1D7CBFF','#9A9C97FF')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+## Tabagismo
+
+### Fuma Cigarro (q71)
+
+```{r}
+tabagismo = base_ut %>% filter(!is.na(q71))%>%
+  mutate(q71 = case_when(q71 == 1~'Sim',
+                         q71 == 2~'Sim, mas parou',
+                         q71 == 3~'Não')) %>% 
+  group_by(q125,q71)%>% 
+  summarise(n = n())
+
+tabagismo %>% group_by(q71) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q71,y = prop,fill = q71))+
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência',
+       x = 'Já fumou ou fuma cigarros?',
+       title = "Frequência Relativa de Fumo de Cigarro")+
+  geom_bar(stat= 'identity', alpha = 0.8)+
+  scale_fill_manual(values = c('grey', 'grey',"grey")) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+tabagismo %>% 
+  ggplot(aes(x = q125,y = n,fill = q71))+
+  labs(fill = 'Uso do cigarro',y = 'Proporção',
+       x = 'Saúde ', title = "Comparação da Frequência Relativa do Fumo e da Saúde")+
+  geom_bar(stat= 'identity',position='fill', alpha = 0.7)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('#E0E0E0', '#878787','#1A1A1A')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao analisar os gráficos acima, a maior parte dos moradores **não fumam** e dos que fumam/já fumaram, tem uma pior saúde.
+\
+
+## Álcool
+
+### Nos últimos 30 dias, o(a) Sr.(a) consumiu alguma bebida  alcoólica como cerveja, vinho, cachaça, etc.? (q78)
+
+```{r}
+alcool = base_ut %>% filter(q78 !=99)%>%
+  mutate(q78 = case_when(q78 == 1~'Sim',
+                         q78 == 2~'Não')) %>% 
+  group_by(q125,q78)%>% 
+  summarise(n = n())
+
+alcool %>% group_by(q78) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q78,y = prop,fill = q78))+
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  scale_fill_manual(values = c("#003C30", "#003C30")) +
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência',
+       x = 'Consumiu álcool nos últimos 30 dias?',
+       title = "Frequência Relativa de uso de Álcool") +
+  geom_bar(stat= 'identity', alpha = 0.7) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+alcool %>% 
+  ggplot(aes(x = q125,y = n,fill = q78))+
+  labs(fill = 'Uso do álcool',y = 'Proporção',
+       x = 'Saúde', title = "Comparação da Frequência Relativa do Álcool e da Saúde")+
+  geom_bar(stat= 'identity',position='fill', alpha = 0.7)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('#ACD39E',  "#003C30")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao analisar o gráfico acima, a maior parte dos moradores **não consomem álcool**.
+\
+
+## Pressão Arterial
+
+### Algum profissional de saúde já mediu a sua pressão? (q82)
+
+```{r}
+medir_pressao = base_ut %>% filter(!is.na(q82))%>%
+  mutate(q82 = case_when(q82 == 1~'Sim',
+                         q82 == 2~'Não')) %>% 
+  group_by(q125,q82)%>% 
+  summarise(n = n())
+
+medir_pressao %>% group_by(q82) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q82,y = prop,fill = q82))+
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência',
+       x = 'Algum profissional já mediu pressão?',
+       title = "Frequência Relativa de Medição da Pressão")+
+  geom_bar(stat= 'identity',alpha = 0.5)+
+  scale_fill_manual(values = c("red",  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+medir_pressao %>% 
+  ggplot(aes(x = q125,y = n,fill = q82))+
+  labs(fill = 'Medição da pressão', y = "Proporção", title = "Comparação da Frequência Relativa da Medição da Pressão e da Saúde",
+       x = 'Saúde')+
+  geom_bar(stat= 'identity',position='fill',alpha=0.6)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('darkred',  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao analisar os gráficos acima, a maior parte dos moradores **já tiveram a pressão medida** e os que não tiveram, tem uma pior saúde.
+\
+
+### Pressão Alta (q84)
+
+```{r}
+pressao_alta = base_ut %>% filter(!is.na(q84))%>%
+  mutate(q84 = case_when(q84 == 1~'Sim',
+                         q84 == 2~'Não')) %>% 
+  group_by(q125,q84)%>% 
+  summarise(n = n())
+
+pressao_alta %>% group_by(q84) %>% summarize(total = sum(n)) %>% 
+  mutate(prop = total / sum(total)) %>% 
+  ggplot(aes(x = q84,y = prop,fill = q84))+
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  geom_text(aes(label = percent(prop, accuracy = 1)), vjust = -0.3)+
+  labs(y = 'Frequência',
+       x = 'Pressão alta', title = "Frequência Relativa de Pressão Alta")+
+  geom_bar(stat= 'identity',alpha = 0.5)+
+  scale_fill_manual(values = c("red",  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = 'None')
+
+pressao_alta %>% 
+  ggplot(aes(x = q125,y = n,fill = q84))+
+  labs(fill = 'Pressão alta', y = "Proporção",
+       x = 'Saúde',title = "Comparação da Frequência Relativa de Pressão Alta e da Saúde")+
+  geom_bar(stat= 'identity',position='fill',alpha=0.6)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('darkred',  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao analisar o gráfico acima, a maior parte dos moradores **não tem pressão alta**.
+\
+
+## Colesterol
+
+### Alguma vez o(a) Sr.(a) fez exame de sangue para medir o seu colesterol? (q88)
+```{r}
+colesterol = base_ut %>% filter(q88 !=99)%>%
+  mutate(q88 = case_when(q88 == 1~'Sim',
+                         q88 == 2~'Não')) %>% 
+  group_by(q125,q88)%>% 
+  summarise(n = n())
+
+
+colesterol %>% 
+  ggplot(aes(x = q125,y = n,fill = q88))+
+  labs(fill = 'Já mediu colesterol?', y = 'Proporção', title = "Comparação da Frequência Relativa de Colesterol e da Saúde",
+       x = 'Saúde')+
+  geom_bar(stat= 'identity',position='fill',alpha=0.6)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('darkred',  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+## Diabetes
+
+### O(a) Sr.(a) já fez exame para medir o açúcar no sangue ou diagnosticar diabetes? (q92)
+
+```{r}
+diabetes = base_ut %>%
+  mutate(q92 = case_when(q92 == 1~'Sim',
+                         q92 == 2~'Não')) %>% 
+  group_by(q125,q92)%>% 
+  summarise(n = n())
+
+
+diabetes %>% 
+  ggplot(aes(x = q125,y = n,fill = q92))+
+  labs(fill = 'Já mediu o açúcar no sangue?', y = 'Proporção', title = "Comparação da Frequência Relativa de Medição de Açúcar no Sangue e da Saúde",
+       x = 'Saúde ')+
+  geom_bar(stat= 'identity',position='fill',alpha=0.6)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('darkred',  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+## Câncer
+
+### Algum médico já lhe disse que o(a) Sr.(a)  tem ou já teve câncer? (q97)
+
+```{r}
+
+cancer = base_ut %>%
+  mutate(q97 = case_when(q97 == 1~'Sim, tenho',
+                         q97 == 2~'Sim, tive',
+                         q97 == 3~'Não')) %>% 
+  group_by(q125,q97)%>% 
+  summarise(n = n())
+
+cancer %>% 
+  ggplot(aes(x = q125,y = n,fill = q97))+
+  labs(fill = ' Tem ou já teve câncer?', y = 'Proporção', title = "Comparação da Frequência Relativa de Câncer e da Saúde",
+       x = 'Saúde ')+
+  geom_bar(stat= 'identity',position='fill',alpha=0.6)+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c('darkred',  "red")) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao analisar o gráfico acima, grande parte dos moradores **não tiveram câncer**.
+\
+
+## Grupo Feminino
+
+### Gravidez (q103)
+
+```{r gravidez}
+gravida = base_ut |> 
+  filter(!is.na(q103)) |> 
+  mutate(gravida = case_when(q103 == 1 ~ "Sim",
+                             q103 == 2 ~ "Não")) |> 
+  group_by(gravida) |> 
+  summarise(total = n())
+
+ggplot(gravida, aes(x = gravida, y = total))+
+  geom_bar(stat = "identity", fill = "pink", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta de Gravidez",
+       x = "Já engravidou?", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Como é mostrado no gráfico acima, **poucas mulheres não engravidaram** nessa região.
+\
+
+```{r gravidez x saude}
+gravida_saude = base_ut |> 
+  filter(!is.na(q103)) |>
+  mutate(gravida = case_when(q103 == 1 ~ "Sim",
+                             q103 == 2 ~ "Não")) |> 
+  group_by(gravida,q125) |> 
+  summarise(total = n())
+
+ggplot(gravida_saude, aes(x = gravida, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta de Gravidez e Saúde",
+       x = 'Engravidou', fill = 'Saúde') +
+  scale_fill_manual(values = c("pink", '#d46780')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_gravidez = gravida_saude |> 
+  left_join(gravida, by = "gravida") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_gravidez |> select(gravida,q125,taxa)
+```
+\
+Ao observar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria das mulheres que **não engravidaram** possuem uma **saúde pior**.
+\
+
+### Número de Filhos (q105)
+
+``` {r filhos}
+filhos = base_ut |> 
+  filter(!is.na(q105)) |>
+  mutate(filhos = case_when(q105 %in% c(1,2) ~ "1 ou 2 filhos",
+                            q105 %in% c(3,4) ~ "3 ou 4 filhos",
+                            q105 %in% c(5,6,7) ~ "5 a 7 filhos",
+                            q105 %in% c(8,9,10) ~ "8 a 10 filhos",
+                            q105 == 0 ~ "Não tem filho")) |> 
+  group_by(filhos) |> 
+  summarise(total = n())
+
+ggplot(filhos, aes(x = filhos, y = total))+
+  geom_bar(stat = "identity", fill = "pink", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta de Mulheres com Filhos",
+       x = "Quantidade de Filhos", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Como é mostrado no gráfico acima, a maioria das mulheres que responderam o formulário tem de **1 a 2 filhos**.
+\
+
+```{r filhos x saude}
+filhos_s = base_ut |> 
+  filter(!is.na(q105)) |> 
+  group_by(q105,q125) |> 
+  summarise(total = n())
+
+medianas_filhos <- filhos_s |> 
+  group_by(q125) |> 
+  summarise(mediana_filho = median(q105))
+
+ggplot(filhos_s, aes(x = q125, y = q105)) +
+  geom_boxplot() +
+  geom_text(data = medianas_filhos, aes(x = q125, y = mediana_filho,
+                                       label = round(mediana_filho, 1)),
+            vjust = 1.5, size = 3.8) +
+  labs(title = "Comparação do Número de filhos e da Saúde Autoavaliada",
+       x = 'Saúde', y = 'Faixa Etária') +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Ao observar o boxplot acima, é possível afirmar que as mulheres com a saúde ruim possuem de 1 a 6 filhos, sendo **3 filhos** a mediana e onde possui mais casos.
+\
+
+
+### Problemas na Gravidez (q107)
+
+``` {r problemas}
+prob_grav = base_ut |> 
+  filter(!is.na(q107)) |>
+  mutate(prob_grav = case_when(q107 == 1 ~ "Sim",
+                               q107 == 2 ~ "Não")) |>
+  group_by(prob_grav) |> 
+  summarise(total = n())
+
+ggplot(prob_grav, aes(x = prob_grav, y = total))+
+  geom_bar(stat = "identity", fill = "pink", alpha = 0.6) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta de Mulheres que tiveram problema de sáude na gestação",
+       x = "Problemas de Saúde na Gestação", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+
+\
+Como é mostrado no gráfico acima, a maior parte das mulheres **não tiveram problemas na gravidez**, entretanto, a quantidade de mulheres que tiveram não foi um número tão baixo.
+\
+
+```{r problemas x saude}
+prob_grav_saude = base_ut |> 
+  filter(!is.na(q107)) |>
+  mutate(prob_grav = case_when(q107 == 1 ~ "Sim",
+                               q107 == 2 ~ "Não")) |>
+  group_by(prob_grav,q125) |> 
+  summarise(total = n())
+
+ggplot(prob_grav_saude, aes(x = prob_grav, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta de Problemas na Gravidez e Saúde",
+       x = 'Problemas na Gravidez', fill = 'Saúde') +
+  scale_fill_manual(values = c("pink", '#d46780')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_prob = prob_grav_saude |> 
+  left_join(prob_grav, by = "prob_grav") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_prob |> select(prob_grav,q125,taxa)
+```
+\
+Ao observar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria das mulheres que **tiveram problema na gravidez** possuem uma **saúde pior**.
+\
+
+
+### Tipo de problema na gravidez (q107)
+
+``` {r tipo prob}
+tp_prob_gravi = base |> 
+  mutate(tp_prob_grav = case_when(q107_qual %in% c("ECLAMPSE", "ECLAMPS", "ECLAPS", "COMEÇO DE ECLAMPSE","INÍCIO DE ECLAMPSE","INÍCIO DE ECLAMPSIA") ~ "ECLAMPSE",
+                                  q107_qual %in% c("NÃO SABE EXPLICAR", "NÃO LEMBRA") ~ "NÃO SABE",
+                                  q107_qual %in% c("ABORTO", "COMEÇO DE ABORTO") ~ "ABORTO",
+                                  q107_qual %in% c("MALÁRIA", "MALÁRIA, COMEÇO DE ABORTO") ~ "MALÁRIA",
+                                  q107_qual %in% c("HIPERTENSÃO ARTERIAL", "PRESSÃO ALTA","PRESSÃO ALTA / ANEMIA") ~ "PRESSÃO ALTA",
+                                  q107_qual %in% c("O AÇÚCAR NO SANGUE SUBIU", "PRESSÃO ALTA","PRESSÃO ALTA / ANEMIA") ~ "PRESSÃO ALTA",
+                                  q107_qual %in% c("INCHAÇO", "INCHAÇÕES") ~ "INCHAÇO",
+                                  q107_qual %in% c("SANGRAMENTO", "PERDA DE SANGUE","HEMORRAGIA") ~ "PERDA DE SANGUE",
+                                  q107_qual %in% c("ENJÔO", "ANSIEDADE E ENJÔO") ~ "ENJÔO",
+                                  q107_qual %in% c("DOR", "DOR E PERDA DE LÍQUIDO") ~ "DOR",
+                                  q107_qual %in% c("NERVOSO", "PROBLEMA DE NERVOS") ~ "NERVOSISMO",
+                                  q107_qual %in% c("PASSOU DA HORA DE NASCER", "PORQUE PASSOU DA HORA") ~ "NASCIMENTO TARDIO",
+                                  q107_qual %in% c("TOXOPLASMOSE", "CAUSADA PELA INFECÇÃO NO SANGUE","INFECÇÃO DE RINS") ~ "INFECÇÃO",
+                                  TRUE ~ q107_qual)) |> 
+  group_by(tp_prob_grav) |> 
+  summarise(total = n()) |> 
+  slice(-1)
+tp_prob_gravi
+```
+\
+Com a tabela acima, é notável que a maioria dos tipos de problema na gravidez ocorre devido à **eclampse**, em segundo lugar devido à malária e em terceiro à pressão alta.
+\
+
+
+### Abortos (q108)
+
+``` {r abortos}
+aborto = base_ut |> 
+  filter(!is.na(q108)) |>
+  mutate(aborto = case_when(q108 == 1 ~ "Sim",
+                            q108 == 2 ~ "Não")) |>
+  group_by(aborto) |> 
+  summarise(total = n())
+
+ggplot(aborto, aes(x = aborto, y = total))+
+  geom_bar(stat = "identity", fill = "pink", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta de Mulheres que já abortaram",
+       x = "Abortou", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a maioria das mulheres da região **nunca abortaram**.
+\
+
+```{r aborto x saude}
+aborto_saude = base_ut |> 
+  filter(!is.na(q108)) |>
+  mutate(aborto = case_when(q108 == 1 ~ "Sim",
+                            q108 == 2 ~ "Não")) |>
+  group_by(aborto,q125) |> 
+  summarise(total = n())
+
+ggplot(aborto_saude, aes(x = aborto, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta de Abortos e Saúde",
+       x = 'Abortou', fill = 'Saúde') +
+  scale_fill_manual(values = c("pink", '#d46780')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_aborto = aborto_saude |> 
+  left_join(aborto, by = "aborto") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_aborto |> select(aborto,q125,taxa)
+```
+\
+Ao observar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria das mulheres que **já abortaram** possuem uma **saúde pior**.
+\
+
+### Exames (q115)
+
+``` {r exames}
+exame = base_ut |> 
+  filter(!is.na(q115)) |>
+  mutate(exame = case_when(q115 == 1 ~ "Sim",
+                              q115 == 2 ~ "Não")) |>
+  group_by(exame) |> 
+  summarise(total = n())
+
+ggplot(exame, aes(x = exame, y = total))+
+  geom_bar(stat = "identity", fill = "pink", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta de Mulheres que já fizeram Exame Preventivo",
+       x = "Exame Preventivo", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a maioria das mulheres da região **fazem exames preventivos**.
+\
+
+```{r exame x saude}
+exame_saude = base_ut |> 
+  filter(!is.na(q115)) |>
+  mutate(exame = case_when(q115 == 1 ~ "Sim",
+                           q115 == 2 ~ "Não")) |>
+  group_by(exame,q125) |> 
+  summarise(total = n())
+
+ggplot(exame_saude, aes(x = exame, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta de Exames e Saúde",
+       x = 'Exames Preventivos', fill = 'Saúde') +
+  scale_fill_manual(values = c("pink", '#d46780')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_exame = exame_saude |> 
+  left_join(exame, by = "exame") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_exame |> select(exame,q125,taxa)
+```
+\
+Ao observar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria das mulheres que **não fazem exames preventivos** possuem uma **saúde pior**, mesmo que a diferença seja pouca.
+\
+
+### Mamografia (q115)
+
+``` {r mamografia}
+mamografia = base_ut |> 
+  filter(!is.na(q119)) |>
+  mutate(mamografia = case_when(q119 == 1 ~ "Sim",
+                                q119 == 2 ~ "Não")) |>
+  group_by(mamografia) |> 
+  summarise(total = n())
+
+ggplot(mamografia, aes(x = mamografia, y = total))+
+  geom_bar(stat = "identity", fill = "pink", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta de Mulheres que já fizeram Mamografia",
+       x = "Mamografia", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a maioria das mulheres da região **nunca fizeram mamografia**.
+\
+
+```{r mamografia x saude}
+mamografia_saude = base_ut |> 
+  filter(!is.na(q119)) |>
+  mutate(mamografia = case_when(q119 == 1 ~ "Sim",
+                                q119 == 2 ~ "Não")) |>
+  group_by(mamografia,q125) |> 
+  summarise(total = n())
+
+ggplot(mamografia_saude, aes(x = mamografia, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta de Mamografia e Saúde",
+       x = 'Mamografia', fill = 'Saúde') +
+  scale_fill_manual(values = c("pink", '#d46780')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_mamografia = mamografia_saude |> 
+  left_join(mamografia, by = "mamografia") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_mamografia |> select(mamografia,q125,taxa)
+```
+\
+Ao observar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que que a maioria das mulheres que **nunca realizaram mamografia** possuem uma **saúde pior**.
+\
+
+
+## Qualidade de vida – Condição Funcional
+
+### Em geral o(a) Sr.(a) diria que sua saúde é (q125)
+
+```{r q125}
+q125 = base_ut |> 
+  select(q125)
+
+ggplot(data = q125, mapping = aes(x = q125, fill = q125)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Avaliação", title ="Frequência Absoluta da Autoavaliação de Saúde dos moradores",
+       y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+
+### Saúde atual, em comparação há um ano (q126)
+
+```{r q126}
+saude_atual = base_ut %>% 
+  group_by(q125,q126) %>% 
+  summarize(n = n()) %>% 
+  mutate(prop = n/sum(n),
+         rotulo = scales::percent(prop))
+
+saude_atual %>% 
+  mutate(q126 = case_when(q126 %in% c(1,2,3) ~ "Boa",
+                          q126 %in% c(4,5) ~ "Ruim"),
+         q126 = factor(q126, levels = c('Boa', 'Ruim'))) |>  
+  ggplot(aes(x = q125,y = n,fill = q126))+
+  geom_bar(stat= 'identity',position='fill',alpha=0.7)+
+  labs(fill = 'Saúde atual',
+       x = 'Saúde em geral', title ="Comparação da Frequência Relativa da Autoavaliação de Saúde dos moradores há um ano com o ano atual (2008)",
+       y = 'Proporção')+
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = scales::percent) +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+```
+
+### Durante as últimas 4 semanas, o(a) Sr.(a) diminui a quantidade de tempo que dedicava-se às suas atividades por causa de algum problema emocional (como sentir-se deprimido ou ansioso) ? (q131)
+
+```{r q131}
+q131 = base_ut |>
+  filter(!is.na(q131)) |> 
+  select(q131)
+
+q131$q131 = factor(x = q131$q131,
+                   levels = c(1, 2),
+                   labels = c("Sim", "Não"))
+
+ggplot(data = q131, mapping = aes(x = q131, fill = q131)) +
+  geom_bar(na.rm = T,alpha=0.7) +
+  labs(x = "Respostas",title= "Frequência Absoluta da diminuição de Atividades por Problemas Emocionais",
+       y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+  
+```
+\
+A maioria das pessoas que responderam ao questionário **não** aparentam ter suas atividades afetadas por algum problema emocional.
+\
+
+### Durante as últimas 4 semanas, sua saúde ou problemas emocionais interferiram na sua relação com amigos e familiares? (q132)
+
+```{r q132}
+q132 = base_ut |>
+  filter(!is.na(q132)) |> 
+  select(q132)
+
+q132$q132 = factor(x = q132$q132,
+                   levels = c(1, 2, 3, 4, 5),
+                   labels = c("Não", "Não", "Pouco", "Sim", "Sim"))
+
+ggplot(data = q132, mapping = aes(x = q132, fill = q132)) +
+  geom_bar(na.rm = T,alpha=0.7) +
+  labs(x = "Respostas", title = "Frequência Absoluta da Saúde interferir na relação com amigos/familiares",
+       y = "Total") +
+  scale_fill_manual(values = c('#DBC3D6', '#B887AD', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+  
+```
+\
+A grande maioria das pessoas entrevistadas **não** tem suas relações afetadas por problemas emocionais.
+\
+
+### O(a) Sr.(a) sentiu alguma dor no corpo nas últimas 4 semanas? Em qual parte do corpo? (q133)
+
+```{r q133}
+# Agrupando as classes de dor em superior, inferior e sem dor
+q133 = base_ut |> 
+  select(q125,q133, q133_nuca, q133_ombro_esq, q133_ombro_dir, q133_braço_esq,
+         q133_braço_dir, q133_alto_costas, q133_mão_esq, q133_mão_dir,
+         q133_baixo_costas, q133_nádegas, q133_coxas, q133_joelhos, q133_pernas,
+         q133_pés) |>
+  filter(!is.na(q133)) |>
+  transmute(intensidade_dor = q133,
+            dor = case_when(
+  if_any(c(q133_nuca, q133_ombro_esq, q133_ombro_dir, q133_braço_esq, 
+           q133_braço_dir, q133_alto_costas, q133_mão_esq, q133_mão_dir, 
+           q133_baixo_costas), ~ .x != 1) ~ "Superiores",
+  if_any(c(q133_nádegas, q133_coxas, q133_joelhos, q133_pernas, q133_pés),
+         ~ .x != 1) ~ "Inferiores",
+  .default = "Sem dor"),
+  q125 = q125)
+
+# Avaliando o número de pessoas sem e com dor
+ggplot(data = q133, mapping = aes(x = dor, fill = dor)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Dor",
+        y = "Contagem") +
+  scale_fill_manual(values = c('#DBC3D6', '#B887AD', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+# Avaliando o nível de dor dentre aqueles que possuem alguma
+ggplot(data = q133 |> filter(dor != "Sem dor"),
+       mapping = aes(x = dor, fill = intensidade_dor)) +
+  geom_bar(position = "dodge",alpha=0.9) +
+  labs(x = "Dor",y = "Contagem",fill = "Intensidade da Dor") +
+  scale_fill_manual(values = c('#E0E0E0', '#FFFFBF', '#FEE08B', '#FDAE61', '#F46D43', '#D53E4F', '#9E0142')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+A maior parte das pessoas que responderam ao questionário **não** apresentaram dor nas ultimas 4 semanas. Porém, dentre aqueles que deram resposta positiva, a maioria possui dores nos **membros superiores com intensidade moderada (4)**.
+\
+
+### Alguma dor no seu corpo interferiu no seu trabalho (incluindo o trabalho dentro de casa) nas últimas 4 semanas? (q134)
+
+```{r q134}
+q134 = base_ut |> 
+  select(q125, q134) |> 
+  filter(!is.na(q134)) |>
+  mutate("interferencia_dor" = case_when(
+    if_any(q134, ~ .x != 1) ~ "Sim",
+    .default = "Não"
+  ))
+
+ggplot(data = q134, mapping = aes(x = interferencia_dor, fill = interferencia_dor)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Interferência da Dor no Trabalho", title="Frequência Absoluta da Saúde interferindo no trabalho",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+#alteracao
+```
+\
+A maioria dos intrevistados não têm sua rotina de trabalho afetada por dores.
+\
+
+### Para cada questão abaixo, por favor dê uma resposta que mais se aproxime da maneira como o(a) Sr.(a) se sente, em relação às últimas 4 semanas (q135)
+
+```{r q135}
+q135 = base_ut |> 
+  select(q125, q135_a, q135_b, q135_c, q135_d, q135_e, q135_f, q135_g, q135_h) |> 
+  filter(if_all(everything(), ~ !is.na(.))) |> 
+  mutate(
+    animado = case_when(
+      if_any(q135_a, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    nervoso = case_when(
+      if_any(q135_b, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    deprimido = case_when(
+      if_any(q135_c, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    calmo = case_when(
+      if_any(q135_d, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    desanimado = case_when(
+      if_any(q135_e, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    esgotado = case_when(
+      if_any(q135_f, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    feliz = case_when(
+      if_any(q135_g, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    ),
+    cansado = case_when(
+      if_any(q135_h, ~ .x != 1) ~ "Sim",
+      .default = "Não"
+    )
+  )
+
+ggplot(data = q135, mapping = aes(x = animado, fill = animado)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Animado",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = nervoso, fill = nervoso)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Nervoso",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = deprimido, fill = deprimido)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Deprimido",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = calmo, fill = calmo)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Calmo",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = desanimado, fill = desanimado)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Desanimado",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = esgotado, fill = esgotado)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Esgotado",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = feliz, fill = feliz)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Feliz",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q135, mapping = aes(x = cansado, fill = cansado)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Cansado",
+        y = "Total") +
+  scale_fill_manual(values = c( '#CAA5C2', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+A maior parte dos entrevistados se diz **animado, nervoso, calmo e feliz**.
+\
+
+### Durante as últimas 4 semanas, por quanto tempo a sua saúde e/ou problemas emocionais interferiram no seu relacionamento com amigos, parentes, etc? (q136)
+
+```{r q136}
+q136 = base_ut |> 
+  select(q125, q136) |> 
+  mutate(
+    interferencia = case_when(
+      q136 == 1 ~ "Sempre",
+      q136 == 2 ~ "Maior parte do Tempo",
+      q136 == 3 ~ "As vezes",
+      q136 == 4 ~ "Poucas Vezes",
+      q136 == 5 ~ "Nunca"
+    )
+  )
+
+ggplot(data = q136, mapping = aes(x = interferencia, fill = interferencia)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Interferência", title="Frequência Absoluta do Tempo que a Saúde interferiu nos relacionamentos pessoais",
+       y = "Total") +
+  scale_fill_manual(values = c('#DBC3D6', '#CAA5C2', '#B887AD', '#7D4F73', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+A saúde emocional dos entrevistados **não têm prejudicado** suas relações sociais.
+\
+
+### O que o(a) Sr(a) acha das afirmações a seguir? (q137)
+
+```{r q137}
+q137 = base_ut |> 
+  select(q125, q137_a:q137_d) |> 
+  filter(if_all(everything(), ~ !is.na(.))) |>
+  mutate(
+    adoecer_facilmente = case_when(
+      q137_a == 1 ~ "Sim",
+      q137_a == 2 ~ "Não",
+      q137_a == 3 ~ "Não Sei"
+    ),
+    saudavel = case_when(
+      q137_b == 1 ~ "Sim",
+      q137_b == 2 ~ "Não",
+      q137_b == 3 ~ "Não Sei"
+    ),
+    piorar_saude = case_when(
+      q137_c == 1 ~ "Sim",
+      q137_c == 2 ~ "Não",
+      q137_c == 3 ~ "Não Sei"
+    ),
+    saude_excelente = case_when(
+      q137_d == 1 ~ "Sim",
+      q137_d == 2 ~ "Não",
+      q137_d == 3 ~ "Não Sei"
+    )
+  )
+
+ggplot(data = q137, mapping = aes(x = adoecer_facilmente, fill = adoecer_facilmente)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Adoece Facilmente",
+       y = "Total") +
+  scale_fill_manual(values = c('#53354D', '#B887AD', '#DBC3D6')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q137, mapping = aes(x = saudavel, fill = saudavel)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Saudavel",
+       y = "Total") +
+  scale_fill_manual(values = c('#53354D', '#B887AD', '#DBC3D6')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q137, mapping = aes(x = piorar_saude, fill = piorar_saude)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Piora de Saúde",
+       y = "Total") +
+  scale_fill_manual(values = c('#53354D', '#B887AD', '#DBC3D6')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+
+ggplot(data = q137, mapping = aes(x = saude_excelente, fill = saude_excelente)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Saude Excelente",
+       y = "Total") +
+  scale_fill_manual(values = c('#53354D', '#B887AD', '#DBC3D6')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+A maior parte dos entrevistados afirma que não adoece com facilidade, se considera uma pessoa saudável, não teve pioraras de saúde e diz possuir uma saúde excelente.
+\
+
+### Quando foi a última vez que procurou assistência de saúde? (q138)
+
+```{r q138}
+q138 = base_ut |> 
+  select(q125, q137_a) |> 
+  filter(if_all(everything(), ~ !is.na(.))) |>
+  mutate(
+    procura_assistencia = case_when(
+      q137_a == 1 ~ "Nos últimos 30 dias",
+      q137_a == 2 ~ "Mais de 1 mês e até 1 ano",
+      q137_a == 3 ~ "Mais de 1 ano e até 2 anos",
+      q137_a == 4 ~ "Mais de 2 anos",
+      q137_a == 5 ~ "Nunca procurou"
+    )
+  )
+
+ggplot(data = q138, mapping = aes(x = procura_assistencia, fill = procura_assistencia)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Última Procura por Assistência",title="Frequência Absoluta da última procura à assistência de saúde",
+       y = "Total") +
+  scale_fill_manual(values = c('#53354D', '#B887AD', '#DBC3D6')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+A maioria dos entrevistados, em média, **busca ajuda médica** entre um mês e um ano.
+\
+
+### Qual foi o principal motivo que fez você não procurar assistência de saúde (q139)
+
+```{r q139}
+q139 = base |> 
+  select(q139) |> 
+  filter(if_all(everything(), ~ !is.na(.))) |>
+  mutate(
+    procura_assistencia = case_when(
+      q139 == 1 ~ "Não teve\nnecessidade",
+      q139 == 2 ~ "Não tinha\ndinheiro",
+      q139 == 3 ~ "Local de\ndifícil acesso",
+      q139 == 4 ~ "Dificuldade\nde transporte",
+      q139 == 5 ~ "Atendimento\ndemorado",
+      q139 == 6 ~ "Falta de\ntempo",
+      q139 == 7 ~ "Outro",
+    )
+  )
+
+ggplot(data = q139, mapping = aes(x = procura_assistencia, fill = procura_assistencia)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Última Procura por Assistência", title="Frequência Absoluta da não procura de assistência de saúde",
+       y = "Total") +
+  scale_fill_manual(values = c('#E0E0E0','#DBC3D6', '#CAA5C2', '#B887AD', '#7D4F73', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+A maioria dos entrevistados **não procurou ajuda médica** por não sentir necessidade.
+\
+
+### Qual foi o principal motivo pelo qual procurou atendimento de saúde nesta última vez? (q140)
+
+```{r q140}
+q140 = base_ut |> 
+  select(q125, q140) |> 
+  filter(!is.na(q140)) |> 
+  mutate(
+    motivo = case_when(
+      q140 == 1 ~ "Doença",
+      q140 == 2 ~ "Atendimento\nodontológico",
+      q140 == 3 ~ "Pré-natal",
+      q140 == 4 ~ "Parto",
+      q140 == 5 ~ "Vacinação",
+      q140 == 6 ~ "Lesões\ncorporais",
+      q140 == 7 ~ "Cirurgia",
+      q140 == 8 ~ "Reabilitação",
+      q140 == 9 ~ "Atestado\nde Saúde",
+      q140 == 10 ~ "Consulta\npara o\nrecém-nascido",
+      q140 == 11 ~ "Consulta\nde rotina",
+      q140 == 12 ~ "Outro",
+    )
+  )
+
+ggplot(data = q140, mapping = aes(x = motivo, fill = motivo)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Motivo de busca por atendimento", title="Frequência Absoluta do motivo da procura de assistência de saúde",
+       y = "Total") +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+Dentre aqueles que procuraram atendimento, os principais motivos foram **realizar consultas de rotina, doença e lesões corporais**.
+\
+
+### O atendimento resolveu o seu problema? (q142)
+
+```{r q142}
+q142 = base_ut |> 
+  select(q125, q142) |> 
+  filter(!is.na(q142)) |> 
+  mutate(
+    resolveu = case_when(
+      q142 == 1 ~ "Sim",
+      q142 == 2 ~ "Não"
+    )
+  )
+
+ggplot(data = q142, mapping = aes(x = resolveu, fill = resolveu)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "O atendimento foi efetivo?",title="Frequência Absoluta da Efetividade do Atendimento",
+       y = "Total") +
+  scale_fill_manual(values = c( '#53354D','#CAA5C2')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\
+A grande maioria respondeu que os atendimentos médicos **foram efetivos**.
+\
+
+### Quando você precisa de atendimento é atendido? (q145)
+
+```{r q145}
+q145 = base_ut |> 
+  select(q145) |> 
+  filter(!is.na(q145)) |> 
+  mutate(
+    precisa_atendimento = case_when(
+      q145 == 1 ~ "Sempre",
+      q145 == 2 ~ "A maior parte do tempo",
+      q145 == 3 ~ "Às vezes",
+      q145 == 4 ~ "Poucas Vezes",
+      q145 == 5 ~ "Nunca"
+    )
+  )
+
+ggplot(data = q145, mapping = aes(x = precisa_atendimento, fill = precisa_atendimento)) +
+  geom_bar(alpha=0.7) +
+  labs(x = "Quando precisa de atendimento é atendido?",
+title="Frequência Absoluta do Atendimento Ocorrer/Não Ocorrer",
+       y = "Total") +
+  scale_fill_manual(values = c('#DBC3D6', '#B887AD', '#7D4F73', '#53354D')) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+        legend.position = "none")
+```
+\ 
+De maneira geral, os entrevistados **são atendidos** quando precisam.
+\
+
+
+## Grupo de Percepção
+
+### Coisa mais importante na vida do morador (q162_1)
+
+``` {r importante}
+coisa_importante = base_ut |> 
+  filter(!is.na(q162_1)) |> 
+  mutate(coisa_importante = case_when(q162_1 == 1 ~ "Qualidade\nda água\nde beber",
+                                      q162_1 == 2 ~ "Lazer",
+                                      q162_1 == 3 ~ "Ar puro",
+                                      q162_1 == 4 ~ "Árvores\nnas ruas",
+                                      q162_1 == 5 ~ "Fossa\nséptica\nem casa",
+                                      q162_1 == 6 ~ "Emprego",
+                                      q162_1 == 7 ~ "Escola\npública",
+                                      q162_1 == 8 ~ "Creche",
+                                      q162_1 == 9 ~ "Cursos de\nqualificação\nprofissional",
+                                      q162_1 == 10 ~ "Atendimento\nmédico",
+                                      q162_1 == 11 ~ "Atendimento a\nportadores de\ndeficiência",
+                                      q162_1 == 12 ~ "Segurança",
+                                      q162_1 == 13 ~ "Recolhimento\ndo lixo\ndas casas")) |>
+  group_by(coisa_importante) |> 
+  summarise(total = n())
+
+ggplot(coisa_importante, aes(x = coisa_importante, y = total))+
+  geom_bar(stat = "identity", fill = "#DFC27D", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta das Coisas mais Importantes pros Moradores",
+       x = "Coisas Importantes", y = "Total") +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a coisa mais importante na vida dos moradores é a **qualidade da água de beber**.
+\
+
+```{r importante x saude}
+coisa_importante_saude = base_ut |> 
+  filter(!is.na(q162_1)) |> 
+  mutate(coisa_importante = case_when(q162_1 == 1 ~ "Qualidade\nda água\nde beber",
+                                      q162_1 == 2 ~ "Lazer",
+                                      q162_1 == 3 ~ "Ar puro",
+                                      q162_1 == 4 ~ "Árvores\nnas ruas",
+                                      q162_1 == 5 ~ "Fossa\nséptica\nem casa",
+                                      q162_1 == 6 ~ "Emprego",
+                                      q162_1 == 7 ~ "Escola\npública",
+                                      q162_1 == 8 ~ "Creche",
+                                      q162_1 == 9 ~ "Cursos de\nqualificação\nprofissional",
+                                      q162_1 == 10 ~ "Atendimento\nmédico",
+                                      q162_1 == 11 ~ "Atendimento a\nportadores de\ndeficiência",
+                                      q162_1 == 12 ~ "Segurança",
+                                      q162_1 == 13 ~ "Recolhimento\ndo lixo\ndas casas")) |>
+  group_by(coisa_importante,q125) |> 
+  summarise(total = n())
+
+ggplot(coisa_importante_saude, aes(x = coisa_importante, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta de Coisas Importantes e Saúde",
+       x = 'Coisas Importantes', fill = 'Saúde') +
+  scale_fill_manual(values = c('#DFC27D', '#543005')) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_import = coisa_importante_saude |> 
+  left_join(coisa_importante, by = "coisa_importante") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_import |> select(coisa_importante,q125,taxa)
+```
+\
+Ao analisar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria dos moradores que escolheram **árvores nas ruas e creche** como a coisa mais importante, possuem a saúde ruim. No entanto, vale observar que tiveram pouquissimas respostas para "árvores nas ruas" e "creche", por isso essas taxas ficaram tão altas.
+\
+
+
+### Qualidades
+
+### Ar (q163_a)
+
+``` {r ar}
+qualidade_ar = base_ut |> 
+  filter(!is.na(q163_a)) |> 
+  mutate(qualidade_ar = case_when(q163_a %in% c(1,2) ~ "Bom",
+                                  q163_a == 3 ~ "Ruim",
+                                  q163_a == 4 ~ "NS/NR")) |>
+  group_by(qualidade_ar) |> 
+  summarise(total = n())
+
+ggplot(qualidade_ar, aes(x = factor(qualidade_ar, levels = c("Bom","Ruim","NS/NR")), y = total))+
+  geom_bar(stat = "identity", fill = "#DFC27D", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Qualidade do Ar",
+       x = "Ar", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a a maioria dos moradores acham o **ar bom**.
+\
+
+
+```{r ar x saude}
+qualidade_ar_saude = base_ut |> 
+  filter(!is.na(q163_a)) |> 
+  mutate(qualidade_ar = case_when(q163_a %in% c(1,2) ~ "Bom",
+                                  q163_a == 3 ~ "Ruim",
+                                  q163_a == 4 ~ "NS/NR")) |>
+  group_by(qualidade_ar,q125) |> 
+  summarise(total = n())
+
+ggplot(qualidade_ar_saude, aes(x = factor(qualidade_ar, levels = c("Bom","Ruim","NS/NR")),
+                               y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta da Qualidade do Ar e Saúde",
+       x = 'Qualidade do Ar', fill = 'Saúde') +
+  scale_fill_manual(values = c('#DFC27D', '#543005')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_ar = qualidade_ar_saude |> 
+  left_join(qualidade_ar, by = "qualidade_ar") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_ar |> select(qualidade_ar,q125,taxa)
+```
+\
+Ao analisar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria dos moradores que escolheram o **ar ruim**, possuem a saúde ruim.
+\
+
+
+### Água (q163_b)
+
+``` {r agua}
+qualidade_agua = base_ut |> 
+  filter(!is.na(q163_b)) |> 
+  mutate(qualidade_agua = case_when(q163_b %in% c(1,2) ~ "Bom",
+                                  q163_b == 3 ~ "Ruim",
+                                  q163_b == 4 ~ "NS/NR")) |>
+  group_by(qualidade_agua) |> 
+  summarise(total = n())
+
+ggplot(qualidade_agua, aes(x = factor(qualidade_agua, levels = c("Bom","Ruim","NS/NR")), y = total))+
+  geom_bar(stat = "identity", fill = "#DFC27D", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Qualidade da Água",
+       x = "Água", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a a maioria dos moradores acham a **água boa**.
+\
+
+```{r agua x saude}
+qualidade_agua_saude = base_ut |> 
+  filter(!is.na(q163_b)) |> 
+  mutate(qualidade_agua = case_when(q163_b %in% c(1,2) ~ "Bom",
+                                    q163_b == 3 ~ "Ruim",
+                                    q163_b == 4 ~ "NS/NR")) |>
+  group_by(qualidade_agua,q125) |> 
+  summarise(total = n())
+
+ggplot(qualidade_agua_saude, aes(x = factor(qualidade_agua, levels = c("Bom","Ruim","NS/NR")),
+                               y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta da Qualidade da Água e Saúde",
+       x = 'Qualidade da Água', fill = 'Saúde') +
+  scale_fill_manual(values = c('#DFC27D', '#543005')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_agua = qualidade_agua_saude |> 
+  left_join(qualidade_agua, by = "qualidade_agua") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_agua |> select(qualidade_agua,q125,taxa)
+```
+\
+Ao analisar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria dos moradores que escolheram a **água ruim**, possuem a saúde ruim.
+\
+
+
+### Terra (q163_c)
+
+``` {r terra}
+qualidade_terra = base_ut |> 
+  filter(!is.na(q163_c)) |> 
+  mutate(qualidade_terra = case_when(q163_c %in% c(1,2) ~ "Bom",
+                                    q163_c == 3 ~ "Ruim",
+                                    q163_c == 4 ~ "NS/NR")) |>
+  group_by(qualidade_terra) |> 
+  summarise(total = n())
+
+ggplot(qualidade_terra, aes(x = factor(qualidade_terra, levels = c("Bom","Ruim","NS/NR")), y = total))+
+  geom_bar(stat = "identity", fill = "#DFC27D", alpha = 0.7) +
+  geom_text(aes(label = total), vjust = -0.3) +
+  labs(title = "Frequência Absoluta da Qualidade da Terra",
+       x = "Terra", y = "Total") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a a maioria dos moradores acham a **terra boa**.
+\
+
+```{r terra x saude}
+qualidade_terra_saude = base_ut |> 
+  filter(!is.na(q163_c)) |> 
+  mutate(qualidade_terra = case_when(q163_c %in% c(1,2) ~ "Bom",
+                                     q163_c == 3 ~ "Ruim",
+                                     q163_c == 4 ~ "NS/NR")) |>
+  group_by(qualidade_terra,q125) |> 
+  summarise(total = n())
+
+ggplot(qualidade_terra_saude, aes(x = factor(qualidade_terra, levels = c("Bom","Ruim","NS/NR")),
+                                 y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta da Qualidade da Terra e Saúde",
+       x = 'Qualidade da Terra', fill = 'Saúde') +
+  scale_fill_manual(values = c('#DFC27D', '#543005')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_terra = qualidade_terra_saude |> 
+  left_join(qualidade_terra, by = "qualidade_terra") |> 
+  mutate(taxa = round((total.x / total.y) * 100,2))
+
+taxa_terra |> select(qualidade_terra,q125,taxa)
+```
+\
+Ao analisar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria dos moradores que escolheram a **terra ruim**, possuem a saúde ruim.
+\
+
+
+### Meio de informação usado
+
+``` {r meio info}
+jornal = base |> 
+  mutate(utiliza = sum(q164_1)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Jornal")
+
+televisao = base |> 
+  mutate(utiliza = sum(q164_2)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Televisão")
+
+revista = base |> 
+  mutate(utiliza = sum(q164_3)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Revista")
+
+radio_com = base |> 
+  mutate(utiliza = sum(q164_4)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Rádio\nComunitária")
+
+batepapo = base |> 
+  mutate(utiliza = sum(q164_5)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Bate-papo")
+
+reuniao = base |> 
+  mutate(utiliza = sum(q164_6)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Reuniões\ncom a\ncomunidade")
+
+telefone = base |> 
+  mutate(utiliza = sum(q164_7)) |>
+  group_by(utiliza) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Telefone")
+
+outros = base |> 
+  mutate(utiliza = sum(q164_8)) |>
+  group_by(utiliza) |>
+  summarise(total = n()) |> 
+  mutate(categoria = "Outros")
+
+
+meio_info <- bind_rows(jornal, televisao,revista,radio_com,batepapo,reuniao,telefone,outros) |> 
+  select(categoria, utiliza, total)
+
+
+ggplot(meio_info, aes(x = categoria, y = utiliza))+
+  geom_text(aes(label = utiliza),position = position_dodge(width = 0.9),vjust=-0.5)+
+  geom_bar(stat = 'identity',position = 'dodge', fill = "#DFC27D",alpha=0.7)+
+  labs(title = "Frequência Absoluta dos Meios de Informação que os moradores utilizam",
+       x = 'Meios de Informação')+
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Com o gráfico acima, é possível observar que a a maioria dos moradores utilizam **televisão**.
+\
+
+```{r meio info x saude}
+jornal_saude = base_ut |> 
+  group_by(q164_1,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Jornal") |> 
+  filter(q164_1 == 1)
+
+televisao_saude = base_ut |> 
+  group_by(q164_2,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Televisão") |> 
+  filter(q164_2 == 1)
+
+revista_saude = base_ut |> 
+  group_by(q164_3,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Revista") |> 
+  filter(q164_3 == 1)
+
+radio_saude = base_ut |> 
+  group_by(q164_4,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Rádio\nComunitária") |> 
+  filter(q164_4 == 1)
+
+batepapo_saude = base_ut |> 
+  group_by(q164_5,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Bate-papo") |> 
+  filter(q164_5 == 1)
+
+reuniao_saude = base_ut |> 
+  group_by(q164_6,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Reuniões\ncom a\ncomunidade") |> 
+  filter(q164_6 == 1)
+
+telefone_saude = base_ut |> 
+  group_by(q164_7,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Telefone") |> 
+  filter(q164_7 == 1)
+
+outros_saude = base_ut |> 
+  group_by(q164_8,q125) |> 
+  summarise(total = n()) |> 
+  mutate(categoria = "Outros") |> 
+  filter(q164_8 == 1)
+
+
+meio_info_saude <- bind_rows(jornal_saude, televisao_saude,revista_saude,radio_saude,batepapo_saude,reuniao_saude,telefone_saude,outros_saude) |> 
+  select(categoria, total,q125)
+
+
+ggplot(meio_info_saude, aes(x = categoria, y = total, fill = q125)) +
+  geom_text(aes(label = total), position = position_dodge(width = 0.9), vjust=-0.5) +
+  geom_bar(stat = 'identity', position = 'dodge', alpha = 0.7) +
+  labs(title = "Comparação por Frequência Absoluta do Meio de Informação e Saúde",
+       x = 'Meio de Informação', fill = 'Saúde') +
+  scale_fill_manual(values = c('#DFC27D', '#543005')) +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+
+taxa_meio = meio_info_saude |> 
+  left_join(meio_info, by = "categoria") |>
+  filter(!is.na(utiliza)) |> 
+  mutate(taxa = round((total.x / utiliza) * 100,2))
+
+taxa_meio |> select(categoria,q125,taxa)
+```
+\
+Ao analisar a tabela com as taxas e comparar com o gráfico de frequência absoluta, é possível notar que a maioria dos moradores que utilizam a **revista** como meio de informação, possuem a saúde ruim.
+\
+
+## Testes de Independência
+```{r}
+base_ut[] <- lapply(base_ut, as.factor)
+
+vars_categoricas = names(base_ut)[sapply(base_ut, is.factor)]
+vars_outras = colnames(base_ut %>% select(-q125))
+variaveis_significativas <- c()
+
+# Realizando testes de independência 2 a 2
+for (var in vars_outras) {
+  tabela <- table(base_ut$q125, base_ut[[var]])
+  
+  if (all(dim(tabela) > 1)) {  
+    teste <- chisq.test(tabela)
+    p_valor <- teste$p.value
+    
+    if (!is.na(p_valor) && p_valor < 0.05) {
+      variaveis_significativas <- c(variaveis_significativas, var)
+    }
+  }
+}
+
+print(variaveis_significativas)
+```
+### 131 x 125
+```{r}
+base_ut = base_ut |> 
+  mutate(
+    q131_a = case_when(
+      q131 == 1 ~ "Sim",
+      .default = "Não"
+    )
+  )
+
+ggplot(data = base_ut |> filter(!is.na(q131_a)), mapping = aes(x = q125, fill = q131_a)) +
+  geom_bar(position = "stack") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Diminuiu atividades",
+       title = "Q131 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Todos os entrevistados que consideram sua saúde boa (positiva) não apresentaram diminuição no tem em que se dedicam às suas atividades por conta de problemas emocionais.
+\
+
+### 132 x 125
+```{r}
+base_ut$q132 = factor(x = base_ut$q132,
+                   levels = c(1, 2, 3, 4, 5),
+                   labels = c("Não", "Não", "Pouco", "Sim", "Sim"))
+
+ggplot(data = base_ut |> filter(!is.na(q132)), mapping = aes(x = q125, fill = q132)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Interferência",
+       title = "Q132 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Dentre aqueles que consideram sua saúde boa, a interfer6encia foi bem pequena.
+\
+
+### 133 x 125
+```{r}
+ggplot(data = q133, mapping = aes(x = q125, fill = dor)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Dor no Corpo",
+       title = "Q133 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Dentre as pessoas que consideram sua saúde ruim, a maior parte relatou sentir dores, principalmente nos membros superiores do corpo.
+\
+
+### 134 x 125
+```{r}
+ggplot(data = q134, mapping = aes(x = q125, fill = interferencia_dor)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Interferencia Dor",
+       title = "Q134 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Os entrevistados que dizem possuir uma saúde ruim apontam que alguma dor corporal interferiu em seu trabalho.
+\
+
+### 135 x 125
+```{r}
+ggplot(data = q135, mapping = aes(x = q125, fill = animado)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente animado",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = nervoso)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente nervoso",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = deprimido)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente deprimido",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = calmo)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente calmo",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = desanimado)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente desanimado",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = esgotado)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente esgotado",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = feliz)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente feliz",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q135, mapping = aes(x = q125, fill = cansado)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Se sente cansado",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Os entrevistados que dizem possuir uma boa saúde se sentem animados, nervosos, calmos, felizes e relativamente cansados. Já os que dizem possuir uma saúde precária apontam que estão nervosos, deprimidos, desanimados, esgotados, cansados porém felizes.
+\
+
+### 136 x 125
+```{r}
+ggplot(data = q136, mapping = aes(x = q125, fill = interferencia)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Interferencia por problemas emocionais",
+       title = "Q136 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Dentre aqueles que alegam saúde boa, apontam que nunca sofreram interferência em seus relacionamentos por conta de problemas emocionais. Já aqueles que possuem saúde ruim alegam que já sofreram com algum tipo de interferência.
+\
+
+### 137 x 125
+```{r}
+
+ggplot(data = q137, mapping = aes(x = q125, fill = adoecer_facilmente)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Adoece Facilmente",
+       title = "Q137 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q137, mapping = aes(x = q125, fill = saudavel)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Tão saudável quanto a média",
+       title = "Q137 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q137, mapping = aes(x = q125, fill = piorar_saude)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Acha que a saude vai piorar",
+       title = "Q135 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+
+ggplot(data = q137, mapping = aes(x = q125, fill = saude_excelente)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Sente sua saúde excelente",
+       title = "Q137 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Dentre aqueles que dizem possuir uma boa saúde, a maioria aponta que não adoece facilmente, é tão saudável quanto a média, não acha que sua saúde vai piorar e sente que sua saúde é excelente. Já para aqueles com a saúde ruim, grande parte diz que adoece facilmente em relação aos que possuem uma boa saúde, se vêem menos saudáveis que a média, acham que sua saúde vai piorar e não a consideram excelente.
+\
+
+### 138 x 125
+```{r}
+ggplot(data = q138, mapping = aes(x = q125, fill = procura_assistencia)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Ultima vez que procurou assistencia",
+       title = "Q138 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Podemos observar que aqueles que dizem possuir boa saúde buscam atendimento com uma frequência menor do que aqueles que relatam saúde ruim.
+\
+
+### 140 x 125
+```{r}
+q140 = q140 |> 
+  add_count(motivo, name = "contagem") |> 
+  mutate(
+    motivo_grafico = case_when(
+      contagem < 10 ~ "Outros",
+      motivo == "Outro" ~ "Outros",
+      .default = motivo
+    )
+  ) |> 
+  select(-contagem)
+  
+ggplot(data = q140, mapping = aes(x = q125, fill = motivo_grafico)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "Principal motivo de busca por atendimento",
+       title = "Q140 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Dentre aqueles que dizem ter uma boa saúde, percebe-se que adotam um comportamento preventivo, de maneira que, a maior parte busca atendimento para realizar consultas de rotina ou para tratar alguma doença. Já aqueles com a saúde ruim, buscam o atendimento somente após ter algum problema em sua grande maioria.
+\
+
+### 142 x 125
+```{r}
+ggplot(data = q142, mapping = aes(x = q125, fill = resolveu)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c('#768185FF', '#9A9C97FF', '#C19A9BFF', '#C7C0C8FF','#E1D7CBFF')) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Saúde",
+       y = "Total",
+       fill = "O atendimento resolveu seu problema?",
+       title = "Q142 X Q125") +
+  theme_bw() +
+  theme(panel.border = element_blank())
+```
+\
+Dentre aqueles que apontam ter uma boa saúde, os atendimentos geralmente resolvem seus problemas. Já os que relatam uma saúde ruim, não possuem um resultado conclusivo, de maneira que, metade aponta ter resolvido seu problema e a outra não. 
+\
